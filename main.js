@@ -1,6 +1,15 @@
 var Walker = require('walker');
 
-Walker('/etc/')
+var prefix = '/volume1/homes/admin/';
+var dir = 'syno-inventory-test';
+
+var prefixLen = prefix.length;
+
+function removePrefix(name) {
+    return name.substr(prefixLen);
+}
+
+Walker(prefix + dir)
   .filterDir(function(dir, stat) {
     if (dir === '/etc/pam.d') {
       console.warn('Skipping /etc/pam.d and children')
@@ -9,16 +18,16 @@ Walker('/etc/')
     return true
   })
   .on('entry', function(entry, stat) {
-    console.log('Got entry: ' + entry)
+    // console.log('Got entry: ' + entry)
   })
   .on('dir', function(dir, stat) {
-    console.log('Got directory: ' + dir)
+    console.log('Got directory: ' + removePrefix(dir));
   })
   .on('file', function(file, stat) {
-    console.log('Got file: ' + file)
+    console.log('Got file: ' + removePrefix(file));
   })
   .on('symlink', function(symlink, stat) {
-    console.log('Got symlink: ' + symlink)
+    console.log('Got symlink: ' + symlink);
   })
   .on('blockDevice', function(blockDevice, stat) {
     console.log('Got blockDevice: ' + blockDevice)
