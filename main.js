@@ -1,4 +1,4 @@
-var Walker = require('Walker');
+var Walker = require('walker');
 
 Walker('/etc/')
   .filterDir(function(dir, stat) {
