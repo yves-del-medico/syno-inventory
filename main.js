@@ -7,6 +7,7 @@ var id3 = require('id3js');
 var util = require('util');
 
 var list = [];
+var duplicates = {};
 
 function loadConfig() {
   var configname = path.join(process.env.HOME, '.syno-inventory.json');
@@ -67,9 +68,9 @@ function walk(config) {
         list.push({
           dir: config.dir,
           name: name,
-          // size: stat.size,
-          // ctime: stat.ctime,
-          // mtime: stat.mtime
+          size: stat.size,
+          ctime: stat.ctime,
+          mtime: stat.mtime
         });
       }
     })
@@ -187,6 +188,20 @@ function computeSha1(entry) {
   return deferred.promise;
 }
 
+function detectDuplicates() {
+  console.log('Detect duplicates');
+  var sha1s = {};
+  list.forEach(function(entry) {
+    var sha1 = entry.sha1;
+    if (entry.size > 0 && sha1s[sha1]) {
+      duplicates[sha1] = sha1s[sha1];
+      sha1s[sha1].push(path.join(entry.dir, entry.name));
+    } else {
+      sha1s[sha1] = [path.join(entry.dir, entry.name)];
+    }
+  });
+}
+
 function main() {
   var config = loadConfig();
   var result = Q(1);
@@ -202,11 +217,13 @@ function main() {
 
   result.then(extractId3)
     .then(computeAllSha1)
+    .then(detectDuplicates)
     .then(displayResults);
 }
 
 function displayResults() {
   console.log('List:', list);
+  console.log('Duplicates:', util.inspect(duplicates, {depth: null}));
 }
 
 main();
