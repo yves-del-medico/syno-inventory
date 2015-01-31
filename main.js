@@ -5,6 +5,7 @@ var path = require('path');
 var Q = require('q');
 var id3 = require('id3js');
 var util = require('util');
+var ExifImage = require('exif').ExifImage;
 
 var list = [];
 var duplicates = {};
@@ -132,6 +133,36 @@ function extractId3() {
     return result;
 }
 
+function extractExif() {
+    console.log("Extract Exif data");
+    var result = Q(1);
+
+    list.forEach(function(entry) {
+      if (/\.jpg$/i.test(entry.name)) {
+        result = result.then(function() {
+
+          console.log('Exif:', entry.name);
+          var deferred = Q.defer();
+
+          new ExifImage({image : path.join(entry.dir, entry.name)}, function(err, exif) {
+            if (err) {
+              console.log('Exif error', err);
+              deferred.reject(err);
+              return;
+            }
+
+            console.log('Exif', exif);
+            entry.exif = exif;
+            deferred.resolve();
+          });
+
+          return deferred.promise;
+        });
+      }
+    });
+    return result;
+}
+
 function computeAllSha1() {
     console.log("Compute SHA1");
     var result = Q(1);
@@ -216,6 +247,7 @@ function main() {
   });
 
   result.then(extractId3)
+    .then(extractExif)
     .then(computeAllSha1)
     .then(detectDuplicates)
     .then(displayResults);
