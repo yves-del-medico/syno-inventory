@@ -1,8 +1,10 @@
 var Walker = require('walker');
 var fs = require('fs');
+var crypto = require('crypto');
 var path = require('path');
 var Q = require('q');
 var id3 = require('id3js');
+var util = require('util');
 
 var list = [];
 
@@ -129,6 +131,18 @@ function extractId3() {
     return result;
 }
 
+function computeAllSha1() {
+    console.log("Compute SHA1");
+    var result = Q(1);
+
+    list.forEach(function(entry) {
+      result = result.then(function() {
+        return computeSha1(entry);
+      });
+    });
+    return result;
+}
+
 function addId3Info(entry, tags) {
   var id3 = {};
   var items = ['title', 'artist', 'album', 'year'];
@@ -152,6 +166,27 @@ function excludeFile(file, config) {
   return found;
 }
 
+function computeSha1(entry) {
+  var filename = path.join(entry.dir, entry.name);
+  // console.log('Compute SHA1:', filename);
+  var deferred = Q.defer();
+  var shasum = crypto.createHash('sha1');
+
+  var s = fs.ReadStream(filename);
+  s.on('data', function(d) {
+    shasum.update(d);
+  });
+
+  s.on('end', function() {
+    var d = shasum.digest('hex');
+    console.log('SHA1', d + '  ' + filename);
+    entry.sha1 = d;
+    deferred.resolve(d);
+  });
+
+  return deferred.promise;
+}
+
 function main() {
   var config = loadConfig();
   var result = Q(1);
@@ -167,6 +202,10 @@ function main() {
 
   result = result.then(function() {
     return extractId3();
+  });
+
+  result = result.then(function() {
+    return computeAllSha1();
   });
 
   // Display the result at the end
