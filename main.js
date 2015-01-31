@@ -200,18 +200,13 @@ function main() {
     }
   });
 
-  result = result.then(function() {
-    return extractId3();
-  });
+  result.then(extractId3)
+    .then(computeAllSha1)
+    .then(displayResults);
+}
 
-  result = result.then(function() {
-    return computeAllSha1();
-  });
-
-  // Display the result at the end
-  result.then(function() {
-    console.log('List:', list);
-  });
+function displayResults() {
+  console.log('List:', list);
 }
 
 main();
