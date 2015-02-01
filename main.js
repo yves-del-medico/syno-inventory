@@ -10,8 +10,16 @@ var ExifImage = require('exif').ExifImage;
 var list = [];
 var duplicates = {};
 
+var CONFIG_DIR = '~/.syno-inventory';
+var CONFIG_FILE = 'config.json';
+
+function pathSubstituteHome(name) {
+  return name.replace(/^~/, process.env.HOME);
+}
+
 function loadConfig() {
-  var configname = path.join(process.env.HOME, '.syno-inventory.json');
+  var configname = path.normalize(path.join(CONFIG_DIR, CONFIG_FILE));
+  configname = pathSubstituteHome(configname);
   var config = fs.readFileSync(configname, {});
   config = JSON.parse(config);
   var dirs = {};
@@ -20,10 +28,7 @@ function loadConfig() {
 
   config.directories.forEach(function(entry) {
     var name = entry.dir;
-    if (entry.dir.substr(0, 1) === '~') {
-      entry.dir = entry.dir.replace(/~/, process.env.HOME);
-    }
-    entry.dir = path.normalize(entry.dir);
+    entry.dir = pathSubstituteHome(path.normalize(entry.dir));
     entry.dir = entry.dir.replace(/\/$/, '');
 
     if (dirs[entry.dir]) {
@@ -233,6 +238,10 @@ function detectDuplicates() {
   });
 }
 
+function storeResults() {
+
+}
+
 function main() {
   var config = loadConfig();
   var result = Q(1);
@@ -250,7 +259,8 @@ function main() {
     .then(extractExif)
     .then(computeAllSha1)
     .then(detectDuplicates)
-    .then(displayResults);
+    .then(displayResults)
+    .then(storeResults);
 }
 
 function displayResults() {

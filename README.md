@@ -3,7 +3,7 @@ syno-inventory
 
 ### Config file
 
-Must be ~/.syno-inventory.json
+Must be ~/.syno-inventory/config.json
 
 ### Config example
 
