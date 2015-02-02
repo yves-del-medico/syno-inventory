@@ -12,6 +12,7 @@ var duplicates = {};
 
 var CONFIG_DIR = '~/.syno-inventory';
 var CONFIG_FILE = 'config.json';
+var DATA_FILE = 'inventory.json';
 
 function pathSubstituteHome(name) {
   return name.replace(/^~/, process.env.HOME);
@@ -239,7 +240,16 @@ function detectDuplicates() {
 }
 
 function storeResults() {
+  var filename = path.normalize(path.join(CONFIG_DIR, DATA_FILE));
+  filename = pathSubstituteHome(filename);
 
+  // TODO: should we keep the previous one ?
+
+  return Q.nfapply(fs.writeFile, [filename, JSON.stringify(list, null, 2), {encoding: 'utf8'}]);
+}
+
+function bye() {
+  console.log('DONE');
 }
 
 function main() {
@@ -260,7 +270,9 @@ function main() {
     .then(computeAllSha1)
     .then(detectDuplicates)
     .then(displayResults)
-    .then(storeResults);
+    .then(storeResults)
+    .then(bye)
+    .done();
 }
 
 function displayResults() {
