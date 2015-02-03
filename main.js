@@ -9,10 +9,17 @@ var ExifImage = require('exif').ExifImage;
 
 var list = [];
 var duplicates = {};
+var entries = {};
 
 var CONFIG_DIR = '~/.syno-inventory';
 var CONFIG_FILE = 'config.json';
 var DATA_FILE = 'inventory.json';
+
+var opt = {
+  forceGenSha1: false,
+  forceGenId3: false,
+  forceGenExif: false
+};
 
 function pathSubstituteHome(name) {
   return name.replace(/^~/, process.env.HOME);
@@ -71,14 +78,33 @@ function walk(config) {
       if (excludeFile(file, config)) {
         console.log('Skipping file: ' + name);
       } else {
-        console.log('Got file: ' + name);
-        list.push({
-          dir: config.dir,
-          name: name,
-          size: stat.size,
-          ctime: stat.ctime,
-          mtime: stat.mtime
-        });
+        var entry = entries[file];
+        var newentry = {
+            dir: config.dir,
+            name: name,
+            size: stat.size,
+            ctime: stat.ctime,
+            mtime: stat.mtime
+          };
+
+        if (entry) {
+          console.log("Existing:", file);
+          var stat2 = {mtime: stat.mtime, ctime: stat.ctime};
+          stat2 = JSON.parse(JSON.stringify(stat2));
+
+          if (entry.size !== stat.size ||
+            entry.mtime != stat2.mtime ||
+            entry.ctime != stat2.ctime) {
+            console.log("File changed:", entry, stat2);
+            list.push(newentry);
+          } else {
+            list.push(entry);
+          }
+          delete entries[file];
+        } else {
+          console.log("New file:", file);
+          list.push(newentry);
+        }
       }
     })
     .on('symlink', function(symlink, stat) {
@@ -109,11 +135,11 @@ function walk(config) {
 }
 
 function extractId3() {
-    console.log("Extract ID3 info");
+    console.log("======= Extract ID3 info");
     var result = Q(1);
 
     list.forEach(function(entry) {
-      if (/.mp3$/.test(entry.name)) {
+      if (/.mp3$/.test(entry.name) && ( ! entry.id3 || opt.forceGenId3)) {
         result = result.then(function() {
 
           console.log('ID3:', entry.name);
@@ -140,11 +166,11 @@ function extractId3() {
 }
 
 function extractExif() {
-    console.log("Extract Exif data");
+    console.log("======= Extract Exif data");
     var result = Q(1);
 
     list.forEach(function(entry) {
-      if (/\.jpg$/i.test(entry.name)) {
+      if (/\.jpg$/i.test(entry.name) && ( ! entry.exif || opt.forceGenExif)) {
         result = result.then(function() {
 
           console.log('Exif:', entry.name);
@@ -157,7 +183,14 @@ function extractExif() {
               return;
             }
 
-            console.log('Exif', exif);
+            delete exif.thumbnail;
+            delete exif.exif.MakerNote;
+            delete exif.exif.UserComment;
+            delete exif.gps.GPSProcessingMethod;
+            delete exif.gps.GPSVersionID;
+            delete exif.interoperability;
+            delete exif.makernote;
+            // console.log('Exif', exif);
             entry.exif = exif;
             deferred.resolve();
           });
@@ -170,13 +203,32 @@ function extractExif() {
 }
 
 function computeAllSha1() {
-    console.log("Compute SHA1");
+    console.log("======= Compute SHA1");
     var result = Q(1);
 
     list.forEach(function(entry) {
-      result = result.then(function() {
-        return computeSha1(entry);
-      });
+      if (( ! entry.sha1) || opt.forceGenSha1) {
+        result = result.then(function() {
+          return computeSha1(entry);
+        });
+      }
+    });
+    return result;
+}
+
+function processAllDirs() {
+    console.log("======= Process all dirs");
+
+    var config = loadConfig();
+    var result = Q(1);
+
+    // Queue all the directories to process
+    config.directories.forEach(function(entry) {
+      if (entry.enabled) {
+        result = result.then(function() {
+          return walk(entry);
+        });
+      }
     });
     return result;
 }
@@ -248,24 +300,40 @@ function storeResults() {
   return Q.nfapply(fs.writeFile, [filename, JSON.stringify(list, null, 2), {encoding: 'utf8'}]);
 }
 
+function loadInventory() {
+  var filename = path.normalize(path.join(CONFIG_DIR, DATA_FILE));
+  filename = pathSubstituteHome(filename);
+
+  var result = Q.nfapply(fs.readFile, [filename, {encoding: 'utf8'}]);
+  return result.then(doTheJob, ignoreAndContinue);
+
+  function ignoreAndContinue() {
+    // Just ignore and continue
+    console.log("No previous file");
+  }
+
+  function doTheJob() {
+    var result = Q.nfapply(fs.readFile, [filename, {encoding: 'utf8'}]);
+    return result.then(function(value) {
+      // console.log("DATA:", value);
+      var values = JSON.parse(value);
+      values.forEach(function(item) {
+        entries[path.join(item.dir, item.name)] = item;
+      });
+    });
+  }
+}
+
 function bye() {
   console.log('DONE');
 }
 
 function main() {
-  var config = loadConfig();
   var result = Q(1);
 
-  // Queue all the directories to process
-  config.directories.forEach(function(entry) {
-    if (entry.enabled) {
-      result = result.then(function() {
-        return walk(entry);
-      });
-    }
-  });
-
-  result.then(extractId3)
+  result.then(loadInventory)
+    .then(processAllDirs)
+    .then(extractId3)
     .then(extractExif)
     .then(computeAllSha1)
     .then(detectDuplicates)
@@ -277,7 +345,8 @@ function main() {
 
 function displayResults() {
   console.log('List:', list);
-  console.log('Duplicates:', util.inspect(duplicates, {depth: null}));
+  console.log('Duplicates:', util.inspect(duplicates, {depth: 2}));
+  console.log('Removed files:', util.inspect(entries, {depth: 2}));
 }
 
 main();
